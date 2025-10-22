@@ -1,14 +1,17 @@
 # Web Serial Console (Next.js + Preact)
 
+![](images/web-interface-serial.png)
+
 A minimal, dark-mode, client-only serial console for the browser using the Web Serial API. Built with Next.js (Pages Router) and Preact via `preact/compat`. Designed for static export and deployment to GitHub Pages.
 
 ## Features
 
-- **Console**: scrolling output, capped buffer (~10k lines), timestamps toggle, auto-scroll toggle, clear, download log
+- **Console**: scrolling output, configurable capped buffer (default 2000 lines), timestamps toggle, auto-scroll toggle, clear, download log
 - **Input**: single-line input, send on Enter (configurable EOL: LF/CR/CRLF)
 - **Connection**: pick a serial device, set baud rate, connect/disconnect
 - **Status**: connection status badge and error surfacing
-- **Persistence**: remembers baud, EOL, timestamps, auto-scroll in `localStorage`
+- **Errors**: structured error messages (including disconnect reasons) appended to the console
+- **Persistence**: remembers baud, EOL, timestamps, auto-scroll, and max lines in `localStorage`
 - **Fallback**: Mock transport when Web Serial is unavailable (for demo/testing)
 
 ## Tech Stack
@@ -22,12 +25,12 @@ A minimal, dark-mode, client-only serial console for the browser using the Web S
 
 - `pages/index.js` — client-only app composition (ConnectionPanel + Console + InputBar)
 - `components/ConnectionPanel.js` — baud, EOL, connect/disconnect, status, errors
-- `components/Console.js` — output area + toolbar (timestamps, auto-scroll, clear, download)
+- `components/Console.js` — output area + toolbar (timestamps, auto-scroll, max lines control, clear, download)
 - `components/InputBar.js` — text input, Enter to send
 - `lib/serial/SerialClient.js` — framework-agnostic facade that emits events and wraps transports
 - `lib/serial/WebSerialTransport.js` — Web Serial implementation
 - `lib/serial/MockTransport.js` — mock implementation (echo + periodic messages)
-- `lib/serial/LineCodec.js` — EOL splitting/buffering
+- `lib/serial/LineCodec.js` — robust EOL splitting/buffering (splits on CRLF, LF, or CR)
 - `lib/serial/constants.js` — defaults: `DEFAULT_BAUD=115200`, `DEFAULT_EOL='\n'`, `EOL_OPTIONS`
 - `lib/serial/utils.js` — helpers (support check, emitter, timestamp formatting)
 - `styles/globals.css` — dark theme and minimal control styling
@@ -45,8 +48,9 @@ A minimal, dark-mode, client-only serial console for the browser using the Web S
 
 Internals:
 - Transport is chosen at runtime: `webserial` if `navigator.serial` exists, otherwise `mock`
-- `WebSerialTransport` listens for `navigator.serial` `disconnect` events and surfaces them
-- `LineCodec` buffers raw chunks → splits into lines by selected EOL and forwards to client as `line` events
+- `WebSerialTransport` follows the canonical pattern: single reader/writer, one read loop, flush+release on close; emits structured errors with `{ where, lost, name, message, stack, raw }` and surfaces `navigator.serial` disconnects
+- `SerialClient` flushes any buffered partial line on disconnect and passes structured errors to the UI
+- `LineCodec` buffers raw chunks → splits into lines by EOL; incoming split is tolerant of CRLF/LF/CR regardless of the selected outgoing EOL
 
 ## Prerequisites
 
@@ -107,11 +111,26 @@ If you rename the repo, update `repoBase` accordingly.
 - If unsupported, the app switches to Mock mode and continues to function for demo/testing.
 - Disconnects are detected and surfaced to the UI with a status update and error message.
 
+## Tested
+
+It works very well on the following:
+
+- Linux Chrome
+- Windows Chrome
+- Windows Firefox
+- Windows Edge
+
+Known limitations:
+
+- Linux Firefox — does not work without an add-on enabling Web Serial
+- macOS — untested
+
 ## Troubleshooting
 
 - "Unsupported engine" or Next.js failing to run: upgrade Node to >= 18.17 (prefer Node 20) via `nvm install 20 && nvm use 20`.
 - No devices shown / prompt doesn’t appear: Make sure you’re in a supported browser and served over HTTPS (or `localhost` during dev).
 - Empty output: Verify baud rate matches your device and that EOL matches your device’s line endings when sending.
+- Error `NetworkError: The device has been lost.`: indicates an OS/USB-level detach or device reset right after open. Check cable/power and ensure no other process has the port open.
 
 ## License
 
