@@ -5,7 +5,10 @@ export default function StatusBadge({ status }) {
     opening: ['#fbbf24', 'Opening'],
     connected: ['#34d399', 'Connected'],
     closing: ['#60a5fa', 'Closing'],
-    error: ['#f87171', 'Error']
+    error: ['#f87171', 'Error'],
+    'no-devices': ['#f87171', 'No Devices'],
+    'no-physical': ['#fbbf24', 'No Physical Device'],
+    'no-input': ['#fbbf24', 'No Input Selected']
   };
   const [color, label] = map[status] || ['#9ca3af', String(status || '')];
   return (

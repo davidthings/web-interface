@@ -133,9 +133,22 @@ function Home() {
     });
     const offSysex = c.on('sysex', (bytes) => {
       try {
-        const text = Array.from(bytes).map(b => b.toString(2).padStart(8, '0')).join(' ');
+        const text = Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
         setMidiLines((prev) => {
           const entry = { ts: Date.now(), text, kind: 'sysex' };
+          const cap = midiMaxLinesRef.current;
+          const next = prev.length >= cap ? [...prev.slice(-(cap - 1)), entry] : [...prev, entry];
+          return next;
+        });
+      } catch (e) {
+        try { setMidiError(String(e?.message || e)); } catch {}
+      }
+    });
+    const offTx = c.on('tx', ({ hex }) => {
+      try {
+        const text = `TX ${hex}`;
+        setMidiLines((prev) => {
+          const entry = { ts: Date.now(), text, kind: 'tx' };
           const cap = midiMaxLinesRef.current;
           const next = prev.length >= cap ? [...prev.slice(-(cap - 1)), entry] : [...prev, entry];
           return next;
@@ -149,6 +162,7 @@ function Home() {
       offError();
       offDevices();
       offSysex();
+      offTx();
       try { c.disconnect(); } catch {}
     };
   }, []);
@@ -188,6 +202,16 @@ function Home() {
     try { midiClientRef.current.selectInput(id); } catch (e) { setMidiError(String(e?.message || e)); }
   }, []);
 
+  const handleMidiStartStreaming = useCallback(() => {
+    setMidiError('');
+    try { midiClientRef.current.startStreaming(); } catch (e) { setMidiError(String(e?.message || e)); }
+  }, []);
+
+  const handleMidiStopStreaming = useCallback(() => {
+    setMidiError('');
+    try { midiClientRef.current.stopStreaming(); } catch (e) { setMidiError(String(e?.message || e)); }
+  }, []);
+
   const handleSend = useCallback(async (text) => {
     try {
       await clientRef.current.writeLine(text);
@@ -214,7 +238,7 @@ function Home() {
   }, [lines, timestamps, mode, baudRate, eol]);
 
   const handleMidiDownload = useCallback(() => {
-    const header = 'mode=webmidi, content=sysex-binary';
+    const header = 'mode=webmidi, content=sysex-hex';
     const content = midiLines.map(l => (midiTimestamps ? `[${formatTimestamp(l.ts)}] ` : '') + l.text).join('\n');
     const blob = new Blob([header + '\n' + content + '\n'], { type: 'text/plain' });
     const a = document.createElement('a');
@@ -239,6 +263,8 @@ function Home() {
             onSelectInput={handleMidiSelectInput}
             onConnect={handleMidiConnect}
             onDisconnect={handleMidiDisconnect}
+            onStartStreaming={handleMidiStartStreaming}
+            onStopStreaming={handleMidiStopStreaming}
           />
         </header>
         <main className="main">
