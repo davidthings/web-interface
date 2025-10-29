@@ -2,7 +2,7 @@
 
 ![](images/web-interface-serial.png)
 
-A minimal, dark-mode, client-only serial console for the browser using the Web Serial API. Built with Next.js (Pages Router) and Preact via `preact/compat`. Designed for static export and deployment to GitHub Pages.
+A minimal, dark-mode, client-only console for Web Serial and Web MIDI. Built with Next.js (Pages Router) and Preact via `preact/compat`. Designed for static export and deployment to GitHub Pages.
 
 ## Features
 
@@ -13,6 +13,9 @@ A minimal, dark-mode, client-only serial console for the browser using the Web S
 - **Errors**: structured error messages (including disconnect reasons) appended to the console
 - **Persistence**: remembers baud, EOL, timestamps, auto-scroll, and max lines in `localStorage`
 - **Fallback**: Mock transport when Web Serial is unavailable (for demo/testing)
+- **MIDI Console**: connect via Web MIDI, select an input, start/stop streaming, view incoming SysEx frames as hex, and see outgoing TX entries
+- **MIDI Status**: device list, connection state, and error surfacing (e.g., no inputs, only virtual “MIDI Through”, or no selection)
+- **MIDI Persistence**: remembers timestamps, auto-scroll, max lines, and the selected input in `localStorage`
 
 ## Tech Stack
 
@@ -27,12 +30,15 @@ A minimal, dark-mode, client-only serial console for the browser using the Web S
 - `components/ConnectionPanel.js` — baud, EOL, connect/disconnect, status, errors
 - `components/Console.js` — output area + toolbar (timestamps, auto-scroll, max lines control, clear, download)
 - `components/InputBar.js` — text input, Enter to send
+- `components/MidiConnectionPanel.js` — MIDI input select, status, connect/disconnect, start/stop streaming
 - `lib/serial/SerialClient.js` — framework-agnostic facade that emits events and wraps transports
 - `lib/serial/WebSerialTransport.js` — Web Serial implementation
 - `lib/serial/MockTransport.js` — mock implementation (echo + periodic messages)
 - `lib/serial/LineCodec.js` — robust EOL splitting/buffering (splits on CRLF, LF, or CR)
 - `lib/serial/constants.js` — defaults: `DEFAULT_BAUD=115200`, `DEFAULT_EOL='\n'`, `EOL_OPTIONS`
 - `lib/serial/utils.js` — helpers (support check, emitter, timestamp formatting)
+- `lib/midi/MidiClient.js` — framework-agnostic Web MIDI facade; emits `status`, `devices`, `sysex`, `tx`, `error`
+- `lib/midi/utils.js` — Web MIDI support checks
 - `styles/globals.css` — dark theme and minimal control styling
 - `next.config.js` — Preact alias, static export, dynamic `basePath`/`assetPrefix`
 - `.github/workflows/deploy.yml` — GitHub Pages deployment workflow
@@ -51,6 +57,37 @@ Internals:
 - `WebSerialTransport` follows the canonical pattern: single reader/writer, one read loop, flush+release on close; emits structured errors with `{ where, lost, name, message, stack, raw }` and surfaces `navigator.serial` disconnects
 - `SerialClient` flushes any buffered partial line on disconnect and passes structured errors to the UI
 - `LineCodec` buffers raw chunks → splits into lines by EOL; incoming split is tolerant of CRLF/LF/CR regardless of the selected outgoing EOL
+
+### MIDI core design
+
+`createMidiClient()` returns an object with:
+- `connect()`, `disconnect()` — requests Web MIDI access with SysEx enabled and manages device state
+- `selectInput(id)` — chooses the MIDI input to listen to; output is auto-selected to match the input name when possible
+- `getStatus()`, `getSelectedInputId()`, `getDevices()` — current state and available inputs/outputs
+- `sendCC(controller, value, channel)` — convenience for Control Change
+- `sendSysex(type, payload)` — sends a device-specific SysEx frame
+- `startStreaming()`, `stopStreaming()` — send SysEx commands to enable/disable streaming on the device
+- `on(type, handler)`, `off(type, handler)` — events: `status`, `devices`, `sysex` (incoming bytes), `tx` (outgoing), `error`
+
+The UI renders incoming SysEx as uppercase hex and logs outgoing transmissions as `TX ...` lines. Settings for the MIDI console (timestamps, auto-scroll, max lines, selected input) are persisted to `localStorage`.
+
+#### SysEx frame structure (generic)
+
+This project treats SysEx frames generically. A typical frame layout is:
+
+```
+F0 <manufacturer/vendor identifier> <product/model or group fields> <payload length> <message type> <payload bytes...> F7
+```
+
+- The exact field meanings and lengths are device-specific.
+- The app only displays the raw bytes and does not parse payloads beyond framing.
+
+## Using the Web MIDI console
+
+1. **Connect**: In the MIDI panel, click Connect to grant Web MIDI access (with SysEx).
+2. **Select input**: Choose a physical input device. If only a virtual "MIDI Through" is present, the panel will indicate no physical device.
+3. **Start streaming**: Click Start Streaming to send a SysEx command that enables device streaming. Use Stop Streaming to disable it.
+4. **Observe and log**: Incoming SysEx appears as hex lines; outgoing messages are logged as `TX ...`. Use the toolbar to toggle timestamps, auto-scroll, adjust max lines, clear, or download the log (`webmidi-sysex.log`).
 
 ## Prerequisites
 
@@ -108,7 +145,8 @@ If you rename the repo, update `repoBase` accordingly.
 ## Browser Support and Permissions
 
 - Web Serial is supported on Chromium-based browsers. It requires HTTPS and a user gesture to request a port.
-- If unsupported, the app switches to Mock mode and continues to function for demo/testing.
+- Web MIDI is supported on Chromium-based browsers. It requires HTTPS and the MIDI permission with SysEx enabled; the app requests access with `sysex: true`.
+- If Web Serial is unsupported, the app switches to Mock mode and continues to function for demo/testing.
 - Disconnects are detected and surfaced to the UI with a status update and error message.
 
 ## Tested
