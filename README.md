@@ -1,6 +1,6 @@
 # Web Serial Console (Next.js + Preact)
 
-![](images/web-interface-serial.png)
+![](images/web_interface.png)
 
 A minimal, dark-mode, client-only console for Web Serial and Web MIDI. Built with Next.js (Pages Router) and Preact via `preact/compat`. Designed for static export and deployment to GitHub Pages.
 
